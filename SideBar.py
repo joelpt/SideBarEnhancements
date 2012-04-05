@@ -8,6 +8,8 @@ from sidebar.SideBarItem import SideBarItem
 from sidebar.SideBarSelection import SideBarSelection
 from sidebar.SideBarProject import SideBarProject
 
+from send2trash import send2trash
+
 def disable_default():
 	default = sublime.packages_path()+'/Default/Side Bar.sublime-menu'
 	desired = sublime.packages_path()+'/SideBarEnhancements/disable_default/Side Bar.sublime-menu.txt'
@@ -904,6 +906,9 @@ class SideBarDuplicateCommand(sublime_plugin.WindowCommand):
 			sublime.error_message("Unable to copy:\n\n"+old+"\n\nto\n\n"+new)
 			self.run([old], new)
 			return
+		item = SideBarItem(new, os.path.isdir(new))
+		if item.isFile():
+			item.edit();
 		SideBarProject().refresh();
 
 	def is_enabled(self, paths = []):
@@ -963,16 +968,11 @@ class SideBarDeleteCommand(sublime_plugin.WindowCommand):
 		if confirmed == 'False' and s.get('confirm_before_deleting', True):
 			self.confirm([item.path() for item in SideBarSelection(paths).getSelectedItems()], [item.pathWithoutProject() for item in SideBarSelection(paths).getSelectedItems()])
 		else:
-			import sys
 			try:
-				path = os.path.join(sublime.packages_path(), 'SideBarEnhancements')
-				if path not in sys.path:
-					sys.path.append(path)
-				import send2trash
 				for item in SideBarSelection(paths).getSelectedItemsWithoutChildItems():
 					if s.get('close_affected_buffers_when_deleting_even_if_dirty', False):
 						item.close_associated_buffers()
-					send2trash.send2trash(item.path())
+					send2trash(item.path())
 				SideBarProject().refresh();
 			except:
 				import functools
@@ -1078,24 +1078,28 @@ class SideBarOpenInBrowserCommand(sublime_plugin.WindowCommand):
 	def run(self, paths = [], type = False):
 		import webbrowser
 		project = SideBarProject()
-		if type == False or type == 'testing':
-			url = project.getPreference('url')
-		elif type == 'production':
-			url = project.getPreference('url_production')
-		else:
-			url = project.getPreference('url')
-		if url:
-			if url[-1:] != '/':
-				url = url+'/'
-			for item in SideBarSelection(paths).getSelectedItems():
-				if item.isUnderCurrentProject():
-					webbrowser.open_new_tab(url + item.pathRelativeFromProjectEncoded())
-				else:
+		if project.hasOpenedProject():
+			if type == False or type == 'testing':
+				url = project.getPreference('url')
+			elif type == 'production':
+				url = project.getPreference('url_production')
+			else:
+				url = project.getPreference('url')
+			if url:
+				if url[-1:] != '/':
+					url = url+'/'
+				for item in SideBarSelection(paths).getSelectedItems():
+					if item.isUnderCurrentProject():
+						webbrowser.open_new_tab(url + item.pathRelativeFromProjectEncoded())
+					else:
+						webbrowser.open_new_tab(item.uri())
+			else:
+				for item in SideBarSelection(paths).getSelectedItems():
 					webbrowser.open_new_tab(item.uri())
+				sublime.status_message('Preference "url" was not found in project file.\n"'+project.getProjectFile()+'", opening local file')
 		else:
 			for item in SideBarSelection(paths).getSelectedItems():
 				webbrowser.open_new_tab(item.uri())
-			sublime.status_message('Preference "url" was not found in project file.\n"'+project.getProjectFile()+'", opening local file')
 
 	def is_enabled(self, paths = []):
 		return SideBarSelection(paths).len() > 0
